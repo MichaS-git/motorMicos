@@ -14,9 +14,10 @@ cd "${TOP}/iocBoot/${IOC}"
 dbLoadRecords("$(MOTOR)/db/motorUtil.db", "P=micos:")
 
 ##
-< MoCo.cmd
-< motor.cmd.SMChydra
-< motor.cmd.SMCcorvus
+#< MoCo.cmd
+#< motor.cmd.SMChydra
+#< motor.cmd.SMCcorvus
+< motor.cmd.SMCpegasus
 
 iocInit
 
