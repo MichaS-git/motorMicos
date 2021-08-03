@@ -19,14 +19,12 @@ class epicsShareClass SMCpegasusAxis : public asynMotorAxis
 {
 public:
   /* These are the methods we override from the base class */
-  SMCpegasusAxis(class SMCpegasusController *pC, int axis);
+  SMCpegasusAxis(class SMCpegasusController *pC, int axis, int highLimit);
   void report(FILE *fp, int level);
   asynStatus move(double position, int relative, double min_velocity, double max_velocity, double acceleration);
-  asynStatus moveVelocity(double min_velocity, double max_velocity, double acceleration);
   asynStatus home(double min_velocity, double max_velocity, double acceleration, int forwards);
   asynStatus stop(double acceleration);
   asynStatus poll(bool *moving);
-  asynStatus setPosition(double position);
   asynStatus setClosedLoop(bool closedLoop);
   asynStatus changeResolution(double newResolution);
 
@@ -34,24 +32,24 @@ private:
   SMCpegasusController *pC_;          /* Pointer to the asynMotorController to which this axis belongs.
                                       Abbreviated because it is used very frequently */
   asynStatus sendAccelAndVelocity(double accel, double velocity);
-  int motorForm_;
   double pitch_;
   int polePairs_;
   double clPeriod_;
   double axisRes_;
   double mres_;
-  int lowLimitConfig_;
-  int highLimitConfig_;
-  double posTravelLimit_;
-  double negTravelLimit_;
-  bool homingInProgress_;
+  char identify_[256];
+  int highLimit_;
+  int posTravelLimit_;
+  int negTravelLimit_;
+  bool rotHomeInProgress_;
+  bool linHomeInProgress_;
   
 friend class SMCpegasusController;
 };
 
 class epicsShareClass SMCpegasusController : public asynMotorController {
 public:
-  SMCpegasusController(const char *portName, const char *SMCpegasusPortName, int numAxes, double movingPollPeriod, double idlePollPeriod);
+  SMCpegasusController(const char *portName, const char *SMCpegasusPortName, int numAxes, double movingPollPeriod, double idlePollPeriod, const char *limitList, const char *skipList);
 
   void report(FILE *fp, int level);
   SMCpegasusAxis* getAxis(asynUser *pasynUser);

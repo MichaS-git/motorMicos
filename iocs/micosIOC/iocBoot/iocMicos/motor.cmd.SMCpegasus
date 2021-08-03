@@ -2,32 +2,34 @@
 
 # Ethernet
 drvAsynIPPortConfigure("pegasusPort","nport1:4002", 0, 0, 0)
-# Serial
-#drvAsynSerialPortConfigure("pegasusPort", "/dev/ttyS1", 0, 0, 0)
-
-# Only show errors
-asynSetTraceMask("pegasusPort", 0, 1)
-# Leave ascii selected so traces can be turned on with a single click
-asynSetTraceIOMask("pegasusPort", 0, 1)
 
 # Set end-of-string terminators
-#asynOctetSetInputEos("pegasusPort",0,"\r\n")
-#asynOctetSetOutputEos("pegasusPort",0,"\r\n")
+asynOctetSetInputEos("pegasusPort",0,"\r\n")
+asynOctetSetOutputEos("pegasusPort",0,"\r\n")
+
+# Only show errors
+#asynSetTraceMask("pegasusPort", 0, 1)
+# Leave ascii selected so traces can be turned on with a single click
+#asynSetTraceIOMask("pegasusPort", 0, 1)
+
+# Turn on asyn traces
+#asynSetTraceIOMask("pegasusPort", 0, "ESCAPE")
+#asynSetTraceMask("pegasusPort", 0, "ERROR|DRIVER")
+# show everything
+#asynSetTraceIOMask("pegasusPort",0,2)
+#asynSetTraceMask("pegasusPort",0,255)
 
 dbLoadTemplate("motor.substitutions.SMCpegasus")
 
 # SMCpegasusCreateController(
 #    port name,
 #    asyn port name,
-#    num axes,
+#    last axis to count to
 #    moving poll period (ms),
-#    idle poll period (ms) )
-SMCpegasusCreateController("Pegasus1", "pegasusPort", 2, 100, 500)
+#    idle poll period (ms) ),
+#    high-limit for each axis, separated by coma
+#    string representing the axes: e.g. 'nnnnyy'. If 'n', the axis will be skipped
+SMCpegasusCreateController("Pegasus1", "pegasusPort", 2, 100, 1000, "0,160", "yy")
 
 # This sleep is useful when asyn traces are enabled
-epicsThreadSleep(3.0)
-
-# Include an asyn record for each motor to make it easy to enable diagnostic messages
-dbLoadRecords("$(ASYN)/db/asynRecord.db","P=micos:,R=pegasusComm,PORT=pegasusPort,ADDR=0,OMAX=256,IMAX=256")
-dbLoadRecords("$(ASYN)/db/asynRecord.db","P=micos:,R=pegasusAsyn1,PORT=Pegasus1,ADDR=0,OMAX=256,IMAX=256")
-dbLoadRecords("$(ASYN)/db/asynRecord.db","P=micos:,R=pegasusAsyn2,PORT=Pegasus1,ADDR=1,OMAX=256,IMAX=256")
+#epicsThreadSleep(3.0)
