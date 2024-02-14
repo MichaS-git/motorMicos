@@ -23,6 +23,9 @@ SRCS += SMCcorvusDriver.cpp
 # SMC pegasus support
 SRCS += SMCpegasusDriver.cpp
 
+# CN30 Controller support
+SRCS += CN30Driver.cpp
+
 Micos_LIBS += motor asyn
 Micos_LIBS += $(EPICS_BASE_IOC_LIBS)
 

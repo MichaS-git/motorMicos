@@ -33,9 +33,9 @@ micos_LIBS += motor
 #ifdef ASYN
 micos_LIBS += asyn
 #endif
-#ifdef SNCSEQ
+ifdef SNCSEQ
 micos_LIBS += seq pv
-#endif
+endif
 
 # micos_registerRecordDeviceDriver.cpp derives from micos.dbd
 micos_SRCS += micos_registerRecordDeviceDriver.cpp
