@@ -6,6 +6,7 @@ USAGE...      Motor driver support for the Micos CN30 controller.
 #include "asynMotorController.h"
 #include "asynMotorAxis.h"
 
+static const char *driverName = "CN30Controller";
 
 class epicsShareClass CN30Axis : public asynMotorAxis
 {
@@ -16,6 +17,7 @@ public:
     asynStatus home(double min_velocity, double max_velocity, double acceleration, int forwards);
     asynStatus stop(double acceleration);
     asynStatus poll(bool *moving);
+    void loopTask();
 
 private:
     CN30Controller *pC_;          /* Pointer to the asynMotorController to which this axis belongs.
@@ -23,6 +25,9 @@ private:
     int axisIndex_;    /* Numbered from 1 */
     int axisXpos_ = 0;
     int axisYpos_ = 0;
+    int steps2Go_;
+    char command_, step_, raxis_, rspeed_, dir_;
+    bool motorStop_;
 
     friend class CN30Controller;
 };

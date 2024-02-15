@@ -129,61 +129,94 @@ CN30Axis::CN30Axis(CN30Controller *pC, int axisNo)
     // controller axes are numbered from 1
     axisIndex_ = axisNo + 1;
 
+    motorStop_ = false;
+
     callParamCallbacks();
 
+}
+
+static void c_looptask(void *arg)
+{
+  CN30Axis *p = (CN30Axis *)arg;
+  p->loopTask();
+}
+
+void CN30Axis::loopTask(void)
+{
+    int status = asynSuccess;
+    int steps;
+    static const char *functionName = "loopTask";
+
+    //pC_->lock();
+    while (steps2Go_ > 0) {
+
+        if (steps2Go_ >= 100) step_=0x07, steps = 100;
+        else if (steps2Go_ >=  50) step_=0x06, steps = 50;
+        else if (steps2Go_ >=  20) step_=0x05, steps = 20;
+        else if (steps2Go_ >=  10) step_=0x04, steps = 10;
+        else if (steps2Go_ >=   5) step_=0x03, steps = 5;
+        else if (steps2Go_ >=   2) step_=0x02, steps = 2;
+        else if (steps2Go_ >=   1) step_=0x01, steps = 1;
+
+        command_ = raxis_ + rspeed_ + dir_ + step_;
+        // ex : 0x00   +  0x10   + 0x08 +   7
+        // ie:  axis1    speed4  + neg  + steps
+        pC_->outString_[0]=command_;
+        pC_->outString_[1]=0;
+        pC_->writeReadController();
+
+        // check if user stoped the movement
+        //pC_->unlock();
+        //epicsThreadSleep(0.001);
+        //pC_->lock();
+        if (motorStop_) {
+            //std::cout << motorStop_ << " motor stopped\n";
+            motorStop_ = false;
+            break;
+        }
+
+        steps2Go_ = steps2Go_ - steps;
+    }
+    //pC_->unlock();
 }
 
 asynStatus CN30Axis::move(double position, int relative, double baseVelocity, double slewVelocity, double acceleration)
 {
     asynStatus status;
-    int steps, steps2Go, moveSize;
-    char command, step, raxis, rspeed, dir;
+    //int steps, steps2Go, moveSize;
+    int steps, moveSize;
+    //char command, step, raxis, rspeed, dir;
     // static const char *functionName = "CN30Axis::move";
 
     //chose the axis bit, we accept only two axes so far
     if (axisIndex_ == 1) {
         moveSize = position - axisXpos_;
-        raxis = 0x00;
+        raxis_ = 0x00;
     } else {
         moveSize = position - axisYpos_;
-        raxis = 0x40;
+        raxis_ = 0x40;
     }
 
     //we can choose out of 4 velocities
-    if (slewVelocity == 0) rspeed = 0x00;
-    else if (slewVelocity > 0 && slewVelocity <=1) rspeed =0x11;
-    else if (slewVelocity > 1 && slewVelocity <=2) rspeed =0x10;
-    else if (slewVelocity > 2 && slewVelocity <=3) rspeed =0x01;
-    else rspeed=0x00;
+    if (slewVelocity == 0) rspeed_ = 0x00;
+    else if (slewVelocity > 0 && slewVelocity <=1) rspeed_ =0x11;
+    else if (slewVelocity > 1 && slewVelocity <=2) rspeed_ =0x10;
+    else if (slewVelocity > 2 && slewVelocity <=3) rspeed_ =0x01;
+    else rspeed_=0x00;
 
     //direction and move size depend on the steps already done
-    if (moveSize > 0) dir=0x00;
-    else dir=0x08;
+    if (moveSize > 0) dir_=0x00;
+    else dir_=0x08;
 
-    steps2Go = abs(moveSize);
+    steps2Go_ = abs(moveSize);
 
     setIntegerParam(pC_->motorStatusDone_, 0);
 
-    while (steps2Go > 0)
-    {
-
-        if (steps2Go >= 100) step=0x07, steps = 100;
-        else if (steps2Go >=  50) step=0x06, steps = 50;
-        else if (steps2Go >=  20) step=0x05, steps = 20;
-        else if (steps2Go >=  10) step=0x04, steps = 10;
-        else if (steps2Go >=   5) step=0x03, steps = 5;
-        else if (steps2Go >=   2) step=0x02, steps = 2;
-        else if (steps2Go >=   1) step=0x01, steps = 1;
-
-        command = raxis + rspeed + dir + step;
-        // ex : 0x00   +  0x10   + 0x08 +   7
-        // ie:  axis1    speed4  + neg  + steps
-        pC_->outString_[0]=command;
-        pC_->outString_[1]=0;
-        pC_->writeReadController();
-
-        steps2Go = steps2Go - steps;
-    }
+    /* launch the while-loop task in separate thread*/
+    epicsThreadCreate("CN30AxisWhileLoopTask",
+                      epicsThreadPriorityMedium,
+                      epicsThreadGetStackSize(epicsThreadStackMedium),
+                      c_looptask, this);
 
     if (axisIndex_ == 1) {
         axisXpos_ = position;
@@ -203,8 +236,8 @@ asynStatus CN30Axis::stop(double acceleration)
     asynStatus status;
     //static const char *functionName = "CN30Axis::stop";
 
-    //std::cout << acceleration << " acceleration\n";
-    //std::cout << pC_->motorStop_ << " pC_->motorStop_\n";
+    motorStop_ = true;
+    std::cout << motorStop_ << " motorStop_\n";
 
     return status;
 }
