@@ -126,13 +126,16 @@ CN30Axis::CN30Axis(CN30Controller *pC, int axisNo)
 {
     //static const char *functionName = "CN30Axis::CN30Axis";
 
-    // controller axes are numbered from 1
-    axisIndex_ = axisNo + 1;
+    // 0x00 = axis 1 ; 0x40 = axis 2 ; 0x80 = axis 3
+    if (axisNo == 0) axisIndex_ = 0x00;
+    else if (axisNo == 1) axisIndex_ = 0x40;
+    else if (axisNo == 2) axisIndex_ = 0x80;
 
-    motorStop_ = false;
+    axisPos_ = 0;
+    axisStop_ = false;
+    axisDone_ = 1;
 
     callParamCallbacks();
-
 }
 
 static void c_looptask(void *arg)
@@ -143,12 +146,18 @@ static void c_looptask(void *arg)
 
 void CN30Axis::loopTask(void)
 {
-    int status = asynSuccess;
     int steps;
-    static const char *functionName = "loopTask";
+    //static const char *functionName = "loopTask";
 
-    //pC_->lock();
+    axisDone_ = 0;
+
     while (steps2Go_ > 0) {
+
+        if (axisStop_) {
+            axisDone_ = 1;
+            axisStop_ = false;
+            break;
+        }
 
         if (steps2Go_ >= 100) step_=0x07, steps = 100;
         else if (steps2Go_ >=  50) step_=0x06, steps = 50;
@@ -158,50 +167,39 @@ void CN30Axis::loopTask(void)
         else if (steps2Go_ >=   2) step_=0x02, steps = 2;
         else if (steps2Go_ >=   1) step_=0x01, steps = 1;
 
-        command_ = raxis_ + rspeed_ + dir_ + step_;
+        command_ = axisIndex_ + rspeed_ + dir_ + step_;
         // ex : 0x00   +  0x10   + 0x08 +   7
         // ie:  axis1    speed4  + neg  + steps
         pC_->outString_[0]=command_;
         pC_->outString_[1]=0;
         pC_->writeReadController();
 
-        // check if user stoped the movement
-        //pC_->unlock();
-        //epicsThreadSleep(0.001);
-        //pC_->lock();
-        if (motorStop_) {
-            //std::cout << motorStop_ << " motor stopped\n";
-            motorStop_ = false;
-            break;
-        }
-
         steps2Go_ = steps2Go_ - steps;
+
+        if (dir_) {
+            axisPos_ = axisPos_ - steps;
+        } else {
+            axisPos_ = axisPos_ + steps;
+        }
     }
-    //pC_->unlock();
+    axisDone_ = 1;
 }
 
 asynStatus CN30Axis::move(double position, int relative, double baseVelocity, double slewVelocity, double acceleration)
 {
-    asynStatus status;
-    //int steps, steps2Go, moveSize;
-    int steps, moveSize;
-    //char command, step, raxis, rspeed, dir;
+    asynStatus status = asynSuccess;
+    int moveSize;
     // static const char *functionName = "CN30Axis::move";
 
-    //chose the axis bit, we accept only two axes so far
-    if (axisIndex_ == 1) {
-        moveSize = position - axisXpos_;
-        raxis_ = 0x00;
-    } else {
-        moveSize = position - axisYpos_;
-        raxis_ = 0x40;
-    }
+    moveSize = position - axisPos_;
 
-    //we can choose out of 4 velocities
-    if (slewVelocity == 0) rspeed_ = 0x00;
-    else if (slewVelocity > 0 && slewVelocity <=1) rspeed_ =0x11;
-    else if (slewVelocity > 1 && slewVelocity <=2) rspeed_ =0x10;
-    else if (slewVelocity > 2 && slewVelocity <=3) rspeed_ =0x01;
+    // I don't know how to read the MRES out of the parameter library correctly ...
+    // that's why hard coded multiplication with MRES
+    // we can choose out of 4 velocities, 0 and greater 3 means fast as possible
+    if (slewVelocity * 3e-4 == 0) rspeed_ = 0x00;
+    else if (slewVelocity * 3e-4 > 0 && slewVelocity * 3e-4 <=1) rspeed_ =0x30;
+    else if (slewVelocity * 3e-4 > 1 && slewVelocity * 3e-4 <=2) rspeed_ =0x20;
+    else if (slewVelocity * 3e-4 > 2 && slewVelocity * 3e-4 <=3) rspeed_ =0x10;
     else rspeed_=0x00;
 
     //direction and move size depend on the steps already done
@@ -210,57 +208,22 @@ asynStatus CN30Axis::move(double position, int relative, double baseVelocity, do
 
     steps2Go_ = abs(moveSize);
 
-    setIntegerParam(pC_->motorStatusDone_, 0);
-
     /* launch the while-loop task in separate thread*/
     epicsThreadCreate("CN30AxisWhileLoopTask",
                       epicsThreadPriorityMedium,
                       epicsThreadGetStackSize(epicsThreadStackMedium),
                       c_looptask, this);
 
-    if (axisIndex_ == 1) {
-        axisXpos_ = position;
-        setDoubleParam(pC_->motorPosition_, axisXpos_);
-    } else {
-        axisYpos_ = position;
-        setDoubleParam(pC_->motorPosition_, axisYpos_);
-    }
-
-    setIntegerParam(pC_->motorStatusDone_, 1);
-
     return status;
 }
 
 asynStatus CN30Axis::stop(double acceleration)
 {
-    asynStatus status;
+    asynStatus status = asynSuccess;
     //static const char *functionName = "CN30Axis::stop";
 
-    motorStop_ = true;
-    std::cout << motorStop_ << " motorStop_\n";
+    axisStop_ = true;
 
-    return status;
-}
-
-asynStatus CN30Axis::home(double baseVelocity, double slewVelocity, double acceleration, int forwards)
-{
-    asynStatus status;
-    // static const char *functionName = "CN30Axis::home";
-
-    /*status = sendAccelAndVelocity(acceleration, slewVelocity);
-
-    // the UPR-1 60 F AIR rotation axis has 7 polepairs, the UPM-160 linear axis has 50
-    // homing to the rm-switch blocks the controller-communication, so we always home to the cal-switch
-
-    if (polePairs_ == 7) {
-      sprintf(pC_->outString_, "1 0 %i setsw 1 1 %i setsw 1 0 %i sncal", (axisNo_ + 1), (axisNo_ + 1), (axisNo_ + 1));
-      rotHomeInProgress_ = true;
-    } else {
-      sprintf(pC_->outString_, "0 0 %i setsw 0 1 %i setsw 0 0 %i sncal 0.1 2 %i setncalvel", (axisNo_ + 1), (axisNo_ + 1), (axisNo_ + 1), (axisNo_ + 1));
-      linHomeInProgress_ = true;
-    }
-
-    status = pC_->writeController();*/
     return status;
 }
 
@@ -272,40 +235,14 @@ asynStatus CN30Axis::home(double baseVelocity, double slewVelocity, double accel
   * \param[out] moving A flag that is set indicating that the axis is moving (true) or done (false). */
 asynStatus CN30Axis::poll(bool *moving)
 {
-    int done=1;
-    //double position=0.0;
-    asynStatus comStatus;
+    asynStatus comStatus = asynSuccess;
 
-    //static const char *functionName = "CN30Axis::poll";
+    setDoubleParam(pC_->motorPosition_, axisPos_);
 
-    //std::cout << stop_ << " stop_\n";
-
-    // Read the current motor position
-    /*sprintf(pC_->outString_, "%i np", (axisNo_ + 1));
-    comStatus = pC_->writeReadController();
-    if (comStatus) goto skip;
-    // The response string is a double
-    position = atof( (char *) &pC_->inString_);
-    setDoubleParam(pC_->motorPosition_, (position / axisRes_) );
-    setDoubleParam(pC_->motorEncoderPosition_, (position / axisRes_) );*/
-
-    // Read the status of this motor
-    /*sprintf(pC_->outString_, "%i nst", (axisNo_ + 1));
-    comStatus = pC_->writeReadController();
-    if (comStatus) goto skip;
-    // The response string is an int
-    axisStatus = atoi( (char *) &pC_->inString_);
-    // Check the moving bit
-    done = !(axisStatus & 0x1);
-    setIntegerParam(pC_->motorStatusDone_, done);
-    setIntegerParam(pC_->motorStatusMoving_, !done);
-    *moving = done ? false:true;*/
-
-    if (done)
-    {
-        setIntegerParam(pC_->motorStatusDone_, done);
-        setIntegerParam(pC_->motorStatusMoving_, !done);
-    }
+    setIntegerParam(pC_->motorStatusDone_, axisDone_);
+    setIntegerParam(pC_->motorStatusMoving_, !axisDone_);
+    *moving = axisDone_ ? false:true;
+    axisStop_ = axisDone_ ? true:false;
 
     callParamCallbacks();
     return comStatus ? asynError : asynSuccess;

@@ -3,10 +3,6 @@
 # Ethernet
 drvAsynIPPortConfigure("CN30Port","192.168.99.20:4001", 0, 0, 0)
 
-# Set end-of-string terminators
-#asynOctetSetInputEos("CN30Port",0,"\r\n")
-#asynOctetSetOutputEos("CN30Port",0,"\r\n")
-
 # Only show errors
 #asynSetTraceMask("CN30Port", 0, 1)
 # Leave ascii selected so traces can be turned on with a single click
@@ -27,7 +23,7 @@ dbLoadTemplate("motor.substitutions.CN30")
 #    num axes,
 #    moving poll period (ms),
 #    idle poll period (ms) ),
-CN30CreateController("CN30_1", "CN30Port", 2, 1000, 1000)
+CN30CreateController("CN30_1", "CN30Port", 2, 100, 0)
 
 # This sleep is useful when asyn traces are enabled
 #epicsThreadSleep(3.0)
