@@ -23,7 +23,7 @@ dbLoadTemplate("motor.substitutions.CN30")
 #    num axes,
 #    moving poll period (ms),
 #    idle poll period (ms) ),
-CN30CreateController("CN30_1", "CN30Port", 2, 100, 0)
+CN30CreateController("CN30_1", "CN30Port", 2, 100, 100)
 
 # This sleep is useful when asyn traces are enabled
 #epicsThreadSleep(3.0)
